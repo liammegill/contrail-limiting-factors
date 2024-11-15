@@ -1,0 +1,9 @@
+numpy
+xarray
+matplotlib
+scipy
+cfgrib
+pandas
+seaborn
+cartopy
+ipykernel
