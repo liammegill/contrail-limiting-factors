@@ -13,6 +13,8 @@ _Corresponding author_: Liam Megill, liam.megill@dlr.de
 
 _doi_: https://doi.org/10.5194/egusphere-2024-3398
 
+_Link to data_: https://doi.org/10.4121/cdb4e3bb-d6f4-4422-a715-b6187098a314
+
 ---
 
 ## General introduction
@@ -31,7 +33,7 @@ The aircraft naming differs to that in the linked paper. For reference, AC0 = CO
 
 ## Data and code organisation and naming
 
-To view and use the code and data, unzip `dataset.zip` into the main directory with this readme file. The data is then provided in `data.zip`, which should be unzipped to a folder `data` within the main directory. The input data to each notebook is explained in more detail in the notebook. Plots can be saved by following the instructions in the notebooks. 
+You can download the code for this project at [4TU.ResearchData](https://doi.org/10.4121/cdb4e3bb-d6f4-4422-a715-b6187098a314). To perform the analyses, unzip `dataset.zip` into the main directory with this readme file. The data is then provided in `data.zip`, which should be unzipped to a folder `data` within the main directory. The input data to each notebook is explained in more detail in the notebook. Plots can be saved by following the instructions in the notebooks. 
 
 The structure of the full project directory is the following:
 
