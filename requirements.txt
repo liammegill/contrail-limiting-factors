@@ -7,3 +7,5 @@ pandas
 seaborn
 cartopy
 ipykernel
+netCDF4
+scikit-learn
