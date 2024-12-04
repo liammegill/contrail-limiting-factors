@@ -1,22 +1,10 @@
 """Module providing limiting factors helper functions."""
 
-# Dataset: Supplementary data for Megill and Grewe (2024):
-# "Investigating the limiting aircraft design-dependent and environmental
-#   factors of persistent contrail formation".
-# Author: Liam Megill, https://orcid.org/0000-0002-4199-6962
-# Affiliation (1): Deutsches Zentrum für Luft- und Raumfahrt (DLR),
-#   Institut für Physik der Atmosphäre
-# Affiliation (2): Delft University of Technology,
-#   Faculty of Aerospace Engineering
-# Correspondence: liam.megill@dlr.de
-# DOI: https://doi.org/10.5194/egusphere-2024-3398
-
-
 #--- import modules ---#
 import numpy as np
 import xarray as xr
 from scipy.sparse import csr_matrix
-from helper import e_sat, e_sat_ice, e_sat_water, e_sat_water_prime
+from limfac.calc_atmos import e_sat, e_sat_ice, e_sat_water, e_sat_water_prime
 
 
 #----------------------------------#
@@ -132,84 +120,63 @@ def calc_pp_min(t, t_max, g, pplq_sat_t_max):
 #--- Limiting factors functions ---#
 #----------------------------------#
 
-def limfac_matrix_calc_flat(mask_flat, neighbors, perimeters, cont_bool_flat):
-    """Calculates the normalised edge lengths of all cells according to the
-    flattened (time, level) mask for the horizontal limiting factors study. 
+def calc_limfac_matrix(mask, cont_bool, neighbors, weight_val, weights):
+    """Calculates the normalised weighting of all cells according to the
+    flattened (time, level) mask for the limiting factors study. In horizontal
+    direction, `weights` corresponds to the cell perimeters; in vertical
+    direction to the cell areas.
     
     Args:
-        mask_flat (_np.ndarray_): Flattened (time, level) limiting factor mask
-        neighbors (_dict_): Dictionary of neighbours and the edge lengths
-            between them
-        perimeters (_np.ndarray_): Array of cell perimeters for normalisation
-        cont_bool_flat (_np.ndarray_): Contrail formation boolean array
-            (True = contrail forms)
-    
-    Returns:
-        _np.ndarray_: Array of normalised edge lengths for all cells
-    """
-
-    n = len(mask_flat)
-    n_nodes = len(neighbors)
-
-    # create CSR matrix
-    rows = []
-    cols = []
-    data = []
-    for i in range(n):
-        if cont_bool_flat[i]:  # if contrail has formed in cell i
-            mod_i = i % n_nodes
-            base_j = int(i / n_nodes) * n_nodes
-            for j in neighbors[mod_i]:
-                if mask_flat[j + base_j]:  # if cell j meets mask criteria
-                    rows.append(i)
-                    cols.append(j)
-                    data.append(neighbors[mod_i][j]['length'])
-    adj_matrix_csr = csr_matrix((data, (rows, cols)), shape=(n, n))
-
-    # calculate normalised edges
-    total_edge_vals = adj_matrix_csr.sum(axis=1).A1
-    norm_edge_vals = total_edge_vals / np.tile(perimeters, n // n_nodes)
-    return norm_edge_vals
-
-
-def vert_limfac_matrix_calc_flat(mask_flat, neighbors, areas, cont_bool_flat):
-    """Calculates the normalised areas of all cells according to the flattened
-    (time, level) mask for the vertical limiting factors study. 
-    
-    Args:
-        mask_flat (_np.ndarray_): Flattened (time, level) vertical limiting
-            factor mask
-        neighbors (_dict_): Dictionary of vertical neighbors and the areas
-            between them
-        areas (_np.ndarray_): Array of cell areas for normalisation
-        cont_bool_flat (_np.ndarray_): Contrail formation boolean array
-            (True = contrail forms)
+        mask (_np.ndarray_): Flattened (time, level) horizontal/vertical
+            limiting factor mask
+        cont_bool (_np.ndarray_): Contrail formation boolean array (True = 
+            contrail forms)
+        neighbors (_dict_): Dictionary of horizontal/vertical neighbors. Must
+            include the corresponding `weight_val` (length or area) between
+            the cells.
+        weight_val (_str_): The weighting value. Choice of `length` for
+            horizontal direction, and `area` for vertical direction.
+        weights (_np.ndarray_): Array of weights for normalisation. Corresponds
+            to cell perimeters in horizontal direction and cell areas in 
+            vertical direction.
     
     Returns:
         _np.ndarray_: Array of normalised areas for all cells
     """
+    # pre-conditions
+    assert len(mask) > 0, "Mask cannot be empty."
+    assert len(mask) == len(cont_bool), "Contrail boolean array " \
+        "and mask must be the same size."
+    assert len(neighbors) > 0, "Neighbors dictionary cannot be empty."
+    assert len(neighbors) % len(weights) == 0, "Neighbors dictionary size " \
+        "must be an integer multiple of weights."
+    assert len(mask) % len(neighbors) == 0, "Contrail mask length must " \
+        "be an integer multiple of neighbors length."
+    assert weight_val in ("length", "area"), "weight_val must be either " \
+        "`length` (horizontal) or `area` (vertical)."
 
-    n = len(mask_flat)
+    n = len(mask)
     n_nodes = len(neighbors)
+    n_weights = len(weights)
 
     # create CSR matrix
     rows = []
     cols = []
     data = []
     for i in range(n):
-        if cont_bool_flat[i]:  # if contrail has formed in cell i
+        if cont_bool[i]:  # if contrail has formed in cell i
             mod_i = i % n_nodes
             base_j = int(i / n_nodes) * n_nodes
             for j in neighbors[mod_i]:
-                if mask_flat[j + base_j]:  # if cell j meets mask criteria
+                if mask[j + base_j]:  # if cell j meets mask criteria
                     rows.append(i)
                     cols.append(j)
-                    data.append(neighbors[mod_i][j]['area'])
+                    data.append(neighbors[mod_i][j][weight_val])
     adj_matrix_csr = csr_matrix((data, (rows, cols)), shape=(n, n))
 
-    # calculate normalised areas
+    # calculate normalised values
     total_area_vals = adj_matrix_csr.sum(axis=1).A1
-    norm_area_vals = total_area_vals / np.tile(areas, n // len(areas))
+    norm_area_vals = total_area_vals / np.tile(weights, n // n_weights)
     return norm_area_vals
 
 
@@ -285,8 +252,8 @@ def calc_limfac_bools(t, rh, g, rhi_cor=1.0):
     return limfac_bools
 
 
-def calc_limfacs_rnd(ds, ac, nbrs, prmts, rhi_cor=1.):
-    """Calculate the horizontal limiting factors of random hours within the
+def calc_limfacs(ds, ac, direction, nbrs, weights, rhi_cor=1.):
+    """Calculate the limiting factors of random hours within the
     2010 decade.
 
     Args:
@@ -295,9 +262,10 @@ def calc_limfacs_rnd(ds, ac, nbrs, prmts, rhi_cor=1.):
             `level`, `latitude` and `longitude` - if a subset of a larger
             dataset is used, then `drop=False` must be called.
         ac (_xarray.Dataset_): Dataset of aircraft definitions
-        nbrs (_dict_): Dictionary of neighbours and the edge lengths
-            between them
-        prmts (_np.ndarray_): Array of cell perimeters for normalisation
+        direction (_str)_: One of 'h' (horizontal) or 'v' (vertical).
+        nbrs (_dict_): Dictionary of neighbours and edge lengths between them
+            (horizontal) or cell areas (vertical).
+        weights (_np.ndarray_): Array of weights for normalisation
         rhi_cor (_float_, optional): Correction to relative humidity.
             Defaults to 1.0.
 
@@ -328,9 +296,12 @@ def calc_limfacs_rnd(ds, ac, nbrs, prmts, rhi_cor=1.):
     assert 'time' in ds.coords, "The 'time' coordiante was not included or "\
         "has been dropped. Ensure that drop=False is used when selecting data."
     assert 'latitude' in ds, "The 'latitude' variable is missing."
-    assert ds.latitude.size == 542080, "The lat/lon data must match the "\
-        "pre-calculated neighbours. A subset of the lat/lon grid cannot be "\
-        "used by this function."
+    assert direction in ("h", "v"), "`direction` must be one of 'h'" \
+        "(horizontal) or 'v' (vertical)."
+    assert ds.latitude.size == len(weights), "The lat/lon data must match "\
+        "the shape of the pre-calculated weights."
+    assert len(nbrs) % ds.latitude.size == 0, "The lat/lon data must match "\
+        "the shape of the pre-calculated neighbors."
 
     # calculate SAC slopes
     g_lvl = np.empty(ds.level.size)
@@ -364,7 +335,10 @@ def calc_limfacs_rnd(ds, ac, nbrs, prmts, rhi_cor=1.):
                                     mask_wss]):
         mask_flat = lf_mask.flatten()
         if mask_flat.sum() != 0:
-            res = limfac_matrix_calc_flat(mask_flat, nbrs, prmts, cont_bool_flat)
+            weight_val = "length" if direction == "h" else "area"
+            res = calc_limfac_matrix(
+                mask_flat, cont_bool_flat, nbrs, weight_val, weights
+            )
             lf_arr[i_lf, :] = res.reshape(ds.t.shape)
 
     # initialise output xarray dataset
@@ -384,8 +358,8 @@ def calc_limfacs_rnd(ds, ac, nbrs, prmts, rhi_cor=1.):
 
     if ds.level.size > 1:
         for idx, lbl in enumerate(labels):
-            ds_out[lbl] = (["levels", "values"], lf_res[idx])
-            ds_out["ppcf"] = (["levels", "values"], ppcf_arr)
+            ds_out[lbl] = (["level", "values"], lf_res[idx])
+            ds_out["ppcf"] = (["level", "values"], ppcf_arr)
     else:
         for idx, lbl in enumerate(labels):
             ds_out[lbl] = (["values"], lf_res[idx])
@@ -397,171 +371,31 @@ def calc_limfacs_rnd(ds, ac, nbrs, prmts, rhi_cor=1.):
     ds_out.longitude.attrs = ds.longitude.attrs
 
     # add new data variable attributes
+    dirln = "horizontal" if direction == "h" else "vertical"
     ds_out.limfac_tot.attrs.update(
         {"units": "-", "long_name": "limfac_tot",
-         "description": "Sum of all limiting factors (non-normalised)"}
+         "description": f"Sum of all {dirln} limiting factors (non-normalised)"}
         )
     ds_out.limfac_frm.attrs.update(
         {"units": "-", "long_name": "limfac_frm",
-         "description": "Sum of formation limiting factor (non-normalised)"}
+         "description": f"Sum of {dirln} formation limiting factor (non-normalised)"}
         )
     ds_out.limfac_frz.attrs.update(
         {"units": "-", "long_name": "limfac_frz",
-         "description": "Sum of freezing limiting factor (non-normalised)"}
+         "description": f"Sum of {dirln} freezing limiting factor (non-normalised)"}
         )
     ds_out.limfac_per.attrs.update(
         {"units": "-", "long_name": "limfac_per",
-         "description": "Sum of persistence limiting factor (non-normalised)"}
+         "description": f"Sum of {dirln} persistence limiting factor (non-normalised)"}
         )
     ds_out.limfac_wss.attrs.update(
         {"units": "-", "long_name": "limfac_wss",
-         "description": "Sum of water supersaturation limiting factor (non-normalised)"}
+         "description": f"Sum of {dirln} water supersaturation limiting factor (non-normalised)"}
         )
     ds_out.ppcf.attrs.update(
         {"units": "-", "long_name": "pPCF",
          "description": "Potential persistent contrail formation (non-normalised)"}
         )
-    ds_out.attrs.update({"n_time": ds.time.size})
-
-    return ds_out
-
-
-def calc_vert_limfacs_rnd(ds, ac, nbrs, areas, rhi_cor=1.):
-    """Calculate the vertical limiting factors of random hours within the
-    2010 decade.
-
-    Args:
-        ds (_xarray.Dataset_): ERA5 dataset with temperature and relative
-            humidity stored on reduced Gaussian grid. Must include coordinates
-            `level`, `latitude` and `longitude` - if a subset of a larger
-            dataset is used, then `drop=False` must be called.
-        ac (_xarray.Dataset_): Dataset of aircraft definitions
-        nbrs (_dict_): Dictionary of neighbours and the edge lengths
-            between them
-        areas (_np.ndarray_): Array of cell areas for normalisation
-        rhi_cor (_float_, optional): Correction to relative humidity.
-            Defaults to 1.0.
-
-    Returns:
-        _xarray.Dataset_: A 1D dataset containing the sum of all limiting
-            factors for a single day (non-normalised).
-
-    The function calculates the following limiting factors:
-      - limfac_tot: Sum of all limiting factors (non-normalised)
-      - limfac_frm: Sum of formation limiting factor (non-normalised)
-      - limfac_frz: Sum of freezing limiting factor (non-normalised)
-      - limfac_per: Sum of persistence limiting factor (non-normalised)
-      - limfac_wss: Sum of water supersaturation limiting factor (non-normalised)
-
-    Each variable in the returned dataset has an associated long_name,
-    units and description.
-
-    Notes:
-        In this version, there is no normalisation of the limfac sums! This is
-        because there is an irregular number of hours per day, so it is easier
-        to perform the normalisation outside of this function.
-    """
-
-    # pre-conditions
-    assert 'level' in ds.coords, "The 'level' coordinate was not included or "\
-        "has been dropped. Ensure that drop=False is used when selecting data."
-    assert 'time' in ds.coords, "The 'time' coordiante was not included or "\
-        "has been dropped. Ensure that drop=False is used when selecting data."
-    assert 'latitude' in ds, "The 'latitude' variable is missing."
-    assert ds.latitude.size == 542080, "The lat/lon data must match the "\
-        "pre-calculated neighbours. A subset of the lat/lon grid cannot be "\
-        "used by this function."
-
-    # calculate SAC slopes
-    g_lvl = np.empty(ds.level.size)
-    for i_lvl, lvl in enumerate(np.atleast_1d(ds.level.data)):
-        g_lvl[i_lvl] = calc_sac_slope(
-            ac.fuel, ac.cp, lvl*100., ac.eps, ac.EI_H2O, ac.eta, ac.Q, ac.R,
-            0.4, ac.dH_mol, ac.cp_mol
-        )
-    g = np.tile(
-        g_lvl[:, np.newaxis, np.newaxis],
-        (1, ds.time.size, ds.latitude.size)
-    ).transpose(1, 0, 2).squeeze()
-
-    # calculate limiting factor boolean dictionary
-    lf_dict = calc_limfac_bools(ds.t, ds.r, g, rhi_cor)
-    cont_bool = lf_dict["cont"]
-
-    # create masks
-    mask_tot = np.array(~cont_bool)  # full limfac mask
-    mask_frm = np.array(~cont_bool & ~lf_dict["frm"])
-    mask_frz = np.array(~cont_bool & ~lf_dict["frz"])
-    mask_per = np.array(~cont_bool & ~lf_dict["per"])
-    mask_wss = np.array(~cont_bool & ~lf_dict["wss"])
-
-    # initialise limfac calculations
-    lf_arr = np.zeros((5,) + ds.t.shape)
-    cont_bool_flat = cont_bool.flatten()
-
-    # calculate limfacs
-    for i_lf, lf_mask in enumerate([mask_tot, mask_frm, mask_frz, mask_per,
-                                    mask_wss]):
-        mask_flat = lf_mask.flatten()
-        if mask_flat.sum() != 0:
-            res = vert_limfac_matrix_calc_flat(mask_flat, nbrs, areas,
-                                               cont_bool_flat)
-            lf_arr[i_lf, :] = res.reshape(ds.t.shape)
-
-    # initialise output xarray dataset
-    ds_out = xr.Dataset(coords = {"level": ds.level.data,
-                                  "latitude": ("values", ds.latitude.data),
-                                  "longitude": ("values", ds.longitude.data)})
-    labels = ["limfac_tot", "limfac_frm", "limfac_frz", "limfac_per",
-              "limfac_wss"]
-
-    # calculate results and ensure single time and level values can be used
-    if ds.time.size > 1:
-        lf_res = np.sum(lf_arr, axis=1)
-        ppcf_arr = np.sum(cont_bool, axis=0)
-    else:
-        lf_res = lf_arr
-        ppcf_arr = cont_bool.astype(float)
-
-    if ds.level.size > 1:
-        for idx, lbl in enumerate(labels):
-            ds_out[lbl] = (["levels", "values"], lf_res[idx])
-            ds_out["ppcf"] = (["levels", "values"], ppcf_arr)
-    else:
-        for idx, lbl in enumerate(labels):
-            ds_out[lbl] = (["values"], lf_res[idx])
-            ds_out["ppcf"] = (["values"], ppcf_arr)
-
-    # share attributes from ds
-    ds_out.level.attrs = ds.level.attrs
-    ds_out.latitude.attrs = ds.latitude.attrs
-    ds_out.longitude.attrs = ds.longitude.attrs
-
-    # add new data variable attributes
-    ds_out.limfac_tot.attrs.update(
-        {"units": "-", "long_name": "limfac_tot",
-         "description": "Sum of all vertical limiting factors (non-normalised)"}
-    )
-    ds_out.limfac_frm.attrs.update(
-        {"units": "-", "long_name": "limfac_frm",
-         "description": "Sum of vertical formation limiting factor (non-normalised)"}
-    )
-    ds_out.limfac_frz.attrs.update(
-        {"units": "-", "long_name": "limfac_frz",
-         "description": "Sum of vertical freezing limiting factor (non-normalised)"}
-    )
-    ds_out.limfac_per.attrs.update(
-        {"units": "-", "long_name": "limfac_per",
-         "description": "Sum of vertical persistence limiting factor (non-normalised)"}
-    )
-    ds_out.limfac_wss.attrs.update(
-        {"units": "-", "long_name": "limfac_wss",
-         "description": "Sum of vertical water supersaturation limiting factor (non-normalised)"}
-    )
-    ds_out.ppcf.attrs.update(
-        {"units": "-", "long_name": "pPCF",
-         "description": "Potential persistent contrail formation (non-normalised)"}
-    )
     ds_out.attrs.update({"n_time": ds.time.size})
 
     return ds_out
