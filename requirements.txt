@@ -1,3 +1,4 @@
+python=3.11.5
 numpy
 xarray
 matplotlib
@@ -9,3 +10,4 @@ cartopy
 ipykernel
 netCDF4
 scikit-learn
+pytest
