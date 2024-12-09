@@ -349,6 +349,7 @@ def calc_limfacs(ds, ac, direction, nbrs, weights, rhi_cor=1.):
               "limfac_wss"]
 
     # calculate results and ensure single time and level values can be used
+    # TODO if the input is a function of time, maybe this isn't necessary
     if ds.time.size > 1:
         lf_res = np.sum(lf_arr, axis=1)
         ppcf_arr = np.sum(cont_bool, axis=0)
