@@ -400,3 +400,140 @@ def calc_limfacs(ds, ac, direction, nbrs, weights, rhi_cor=1.):
     ds_out.attrs.update({"n_time": ds.time.size})
 
     return ds_out
+
+
+def calc_limfacs_nonborder(ds, ac_full, ac_ids, rhi_cor=1.0):
+    """Calculate the non-border (cell) limiting factors using ERA5 data
+    for the 2010 decade.
+
+    Args:
+        ds (_xarray.Dataset_): ERA5 dataset with temperature and relative
+            humidity stored on reduced Gaussian grid. Must include coordinates
+            `level`, `latitude` and `longitude` - if a subset of a larger
+            dataset is used, then `drop=False` must be called.
+        ac_full (_xarray.Dataset_): Dataset with aircraft design parameters.
+            Data variable "id" must correspond with `ac_ids`.
+        ac_ids (_list_): List of strings corresponding to aircraft IDs.
+        rhi_cor (_float_, optional): Correction to relative humidity.
+            Defaults to 1.0.
+    
+    Returns:
+        _xarray.Dataset_: A 1D dataset containing the sum of all limiting
+            factors (for the cell, not the borders) for a single day.
+
+    The function calculates the following limiting factors:
+      - limfac_tot: Sum of all limiting factors (non-normalised)
+      - limfac_frm: Sum of formation limiting factor (non-normalised)
+      - limfac_frz: Sum of freezing limiting factor (non-normalised)
+      - limfac_per: Sum of persistence limiting factor (non-normalised)
+      - limfac_wss: Sum of water supersaturation limiting factor
+        (non-normalised)
+
+    Each variable in the returned dataset has an associated long_name, units
+    and description.
+
+    Notes:
+        In this version, there is no normalisation of the limfac sums! This is
+        because there is an irregular number of hours per day, so it is easier
+        to perform the normalisation outside of this function.
+    """
+
+    # pre-conditions
+    assert 'level' in ds.coords, "The 'level' coordinate was not included or "\
+        "has been dropped. Ensure that drop=False is used when selecting data."
+    assert 'time' in ds.coords, "The 'time' coordiante was not included or "\
+        "has been dropped. Ensure that drop=False is used when selecting data."
+    assert 'latitude' in ds, "The 'latitude' variable is missing."
+    assert 't' in ds, "The 't' (temperature) variable is missing."
+    assert 'r' in ds, "The 'r' (relative humidity) variable is missing."
+    assert ds.t.shape == (ds.time.size, ds.level.size, ds.latitude.size), \
+        f"Data variable `t` is size {ds.t.shape} but should be size " \
+        f"{(ds.time.size, ds.level.size, ds.latitude.size)}."
+    assert ds.r.shape == (ds.time.size, ds.level.size, ds.latitude.size), \
+        f"Data variable `r` is size {ds.r.shape} but should be size " \
+        f"{(ds.time.size, ds.level.size, ds.latitude.size)}."
+
+    # calculate relative humidity and partial pressures
+    ppi_sat = e_sat_ice(ds.t)
+    ppw_sat = e_sat_water(ds.t)
+    pp_h2o = ds.r / 100. * e_sat(ds.t) / rhi_cor  # with RHi correction
+
+    # aircraft-independent limiting factors
+    per_bool = np.where(ppi_sat <= pp_h2o, 1.0, 0.0)
+    wss_bool = np.where(pp_h2o <= ppw_sat, 1.0, 0.0)
+    frz_bool = np.where(ds.t <= 235.15, 1.0, 0.0)
+
+    # initialise arrays for storing data
+    cont_bool_arr = np.empty((len(ac_ids), ds.time.size,
+                              ds.level.size, ds.latitude.size))
+    frm_bool_arr = np.empty((len(ac_ids), ds.time.size,
+                             ds.level.size, ds.latitude.size))
+
+    # loop per aircraft design
+    for i_ac, ac_id in enumerate(ac_ids):
+        ac = ac_full.sel(id=ac_id)
+
+        # calculate SAC slopes
+        g_lvl = np.empty(ds.level.size)
+        for i_lvl, lvl in enumerate(np.atleast_1d(ds.level.data)):
+            g_lvl[i_lvl] = calc_sac_slope(
+                ac.fuel, ac.cp, lvl*100., ac.eps, ac.EI_H2O, ac.eta, ac.Q, ac.R,
+                0.4, ac.dH_mol, ac.cp_mol
+            )
+        g = np.tile(
+            g_lvl[:, np.newaxis, np.newaxis],
+            (1, ds.time.size, ds.latitude.size)
+        ).transpose(1, 0, 2).squeeze()
+
+        # formation limiting factor and persistent contrail boolean
+        t_frm_lim = calc_t_frm_lim(g, ds.t, pp_h2o)
+        frm_bool = np.where(ds.t <= t_frm_lim, 1.0, 0.0)
+        cont_bool = np.where(frm_bool & frz_bool & per_bool & wss_bool,
+                             1.0, 0.0)
+        # store in array
+        frm_bool_arr[i_ac, :] = frm_bool
+        cont_bool_arr[i_ac, :] = cont_bool
+
+    # sum over time
+    ppcf_arr = cont_bool_arr.sum(axis=1)
+    frm_arr = frm_bool_arr.sum(axis=1)
+    per_arr = per_bool.sum(axis=0)
+    frz_arr = frz_bool.sum(axis=0)
+
+    # store as dataset
+    ds_out = xr.Dataset(
+        {
+            "ppcf": (["AC", "level", "values"], ppcf_arr),
+            "frm": (["AC", "level", "values"], frm_arr),
+            "frz": (["level", "values"], frz_arr),
+            "per": (["level", "values"], per_arr)
+        },
+        coords={
+            "AC": ac_ids,
+            "level": ds.level,
+            "latitude": ds.latitude,
+            "longitude": ds.longitude,
+        }
+    )
+
+    # update attributes
+    ds_out.AC.attrs.update({"description": "Aircraft ID"})
+    ds_out.ppcf.attrs.update(
+        {"units": "-", "long_name": "pPCF",
+         "description": "Potential persistent contrail formation (non-normalised)"}
+    )
+    ds_out.per.attrs.update(
+        {"units": "-", "long_name": "persistence",
+         "description": "Where persistence requirement is met"}
+    )
+    ds_out.frz.attrs.update(
+        {"units": "-", "long_name": "persistence",
+         "description": "Where freezing requirement is met"}
+    )
+    ds_out.frm.attrs.update(
+        {"units": "-", "long_name": "persistence",
+         "description": "Where formation requirement is met"}
+    )
+    ds_out.attrs.update({"n_time": ds.time.size})
+
+    return ds_out
