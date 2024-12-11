@@ -86,7 +86,7 @@ def calc_hist_arr(ds, bin_edges, bin_centres, rhi_cor=1.0):
     g_max = calc_g_max(ds.t, ds.r, rhi_cor)
 
     # calculate histograms
-    hist_arr = np.empty((ds.level.size, 4, len(bin_centres)))
+    hist_arr = np.empty((ds.level.size, 4, len(bin_centres)), dtype=np.int32)
     for i_lvl in range(len(np.atleast_1d(ds.level.data))):
         g_max_lvl = g_max.isel(level=i_lvl)
 
@@ -154,7 +154,7 @@ def calc_cumulative_hist(ds, lat_band):
     cum_hist = np.empty((ds.season.size, ds.level.size, ds.bin_centre.size))
     for i in range(len(ds.season)):
         ds_i = ds.isel(season=i)
-        num_vals = ds_i.num_vals * hist_ratios[i_lat]  # weighted num_vals
+        num_vals = int(ds_i.num_vals) * hist_ratios[i_lat]  # weighted num_vals
         cum_hist[i, :, :] = ds_i[lat_band].cumsum(dim="bin_centre") / num_vals
 
     return cum_hist
