@@ -23,31 +23,35 @@ def fmin_t_max(t_max, t_a, p_a):
     return p_a - e_sat_water(t_max) + e_sat_water_prime(t_max) * (t_max - t_a)
 
 
-def calc_g_max(t, rh, rhi_cor=1.0):
+def calc_g_max(t, rh, rhi_cor=1.0, t_cor=0.0):
     """Calculates the maximum G slope for a given combination of temperature
     `t` and relative humidity `rh`.
 
     Args:
         t (array-like): Ambient temperature [K].
         rh (array-like): Ambient relative humidity [%].
-        rhi_cor (float, optional): Correction to relative humidity.
-            Defaults to 1.0.
+        rhi_cor (float, optional): Correction to relative humidity
+            (multiplier). Defaults to 1.0.
+        t_cor (float, optional): Correction to temperature (addition) [K].
+            Defaults to 0.0.
 
     Returns:
         array-like: Maximum G slope `G_max`
     """
+    # with temperature correction
+    tn = t + t_cor
     # calculate relative humidity and partial pressures
-    ppi_sat = e_sat_ice(t)
-    ppw_sat = e_sat_water(t)
-    pp_h2o = rh / 100.0 * e_sat(t) / rhi_cor  # with RHi correction
+    ppi_sat = e_sat_ice(tn)
+    ppw_sat = e_sat_water(tn)
+    pp_h2o = rh / 100.0 * e_sat(tn) / rhi_cor  # with RHi correction
 
     # calculate T_max (using limit at 235.15 K)
-    t_only_pers = t * np.where(
-        (t <= 235.15) & (ppi_sat <= pp_h2o) & (pp_h2o <= ppw_sat),
+    t_only_pers = tn * np.where(
+        (tn <= 235.15) & (ppi_sat <= pp_h2o) & (pp_h2o <= ppw_sat),
         1, np.nan
     )
     t_max = newton(fmin_t_max, t_only_pers+10.0,
-                   args=(t_only_pers, pp_h2o), tol=0.5)
+                   args=(t_only_pers, pp_h2o), tol=1e-2)
     t_max2 = np.where(t_max <= 235.15, t_max, 235.15)
 
     # calculate G_max and return
@@ -55,14 +59,14 @@ def calc_g_max(t, rh, rhi_cor=1.0):
     return g_max
 
 
-def calc_hist_arr(ds, bin_edges, bin_centres, rhi_cor=1.0):
+def calc_hist_arr(ds, bin_edges, bin_centres, rhi_cor=1.0, t_cor=0.0):
     """
     Calculate histograms of `G_max` across four different latitude bands:
     global ("tot_hist"), northern extratropics ("xtropN_hist"), tropics
     ("trop_hist") and southern extratropics ("xtropS_hist").
 
     Args:
-        ds (_xarray.Dataset_): ERA5 dataset with temperature and relative
+        ds (xarray.Dataset): ERA5 dataset with temperature and relative
             humidity stored on reduced Gaussian grid. Must include coordinates
             `level`, `latitude` and `longitude` - if a subset of a larger
             dataset is used, then `drop=False` must be called.
@@ -70,8 +74,10 @@ def calc_hist_arr(ds, bin_edges, bin_centres, rhi_cor=1.0):
             calculations.
         bin_centres (array-like): The center values of each bin, used for
             constructing the histogram array.
-        rhi_cor (_float_, optional): Correction to relative humidity.
-            Defaults to 1.0.
+        rhi_cor (float, optional): Correction to relative humidity
+            (multiplier). Defaults to 1.0.
+        t_cor (float, optional): Correction to temperature (addition) [K].
+            Defaults to 0.0.
 
     Returns:
         numpy.ndarray: A 3D array of histograms with shape
@@ -83,7 +89,7 @@ def calc_hist_arr(ds, bin_edges, bin_centres, rhi_cor=1.0):
             - The third dimension corresponds to the binned values.
     """
     # calculate G_max
-    g_max = calc_g_max(ds.t, ds.r, rhi_cor)
+    g_max = calc_g_max(ds.t, ds.r, rhi_cor, t_cor)
 
     # calculate histograms
     hist_arr = np.empty((ds.level.size, 4, len(bin_centres)), dtype=np.int32)
