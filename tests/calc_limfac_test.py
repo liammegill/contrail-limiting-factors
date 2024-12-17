@@ -251,15 +251,16 @@ class TestCalcLimfacs:
     @pytest.fixture(scope="class")
     def ds(self):
         """Fixture to create basic dataset for testing."""
-        level = 350.0  # [hPa]
-        time = 0.0
+        level = np.array([350.0])  # [hPa]
+        time = np.array([0.0])
         values = np.arange(5)
-        t = np.array([228.0, 231.0, 228.0, 228.0, 240.0])
-        r = np.array([100.0, 100.0, 99.0, 160.0, 100.0])
+        t = np.array([[[228.0, 231.0, 228.0, 228.0, 240.0]]])
+        r = np.array([[[100.0, 100.0, 99.0, 160.0, 100.0]]])
         latitudes = np.linspace(-89.0, 89.0, num=5)
         longitudes = np.linspace(0.0, 350.0, num=5)
         return xr.Dataset(
-            {"t": (["values"], t), "r": (["values"], r)},
+            {"t": (["time", "level", "values"], t),
+             "r": (["time", "level", "values"], r)},
             coords={"values": values, "time": time, "level": level,
                     "latitude": (["values"], latitudes),
                     "longitude": (["values"], longitudes)}
@@ -267,146 +268,55 @@ class TestCalcLimfacs:
 
     def test_basic_case_1(self, neighbors, perimeters, ac, ds):
         """Test basic case 1: A persistent contrail forms only in cell 0."""
-        ds["t"].values = np.array([228.0, 231.0, 228.0, 228.0, 240.0])
-        ds["r"].values = np.array([100.0, 100.0, 99.0, 160.0, 100.0])
+        ds["t"].values = np.array([[[228.0, 231.0, 228.0, 228.0, 240.0]]])
+        ds["r"].values = np.array([[[100.0, 100.0, 99.0, 160.0, 100.0]]])
         result = lf.calc_limfacs(ds, ac, "h", neighbors, perimeters)
-        np.testing.assert_equal(result["ppcf"], np.array([1., 0., 0., 0., 0.]))
+        np.testing.assert_equal(result["ppcf"], np.array([[1., 0., 0., 0., 0.]]))
         np.testing.assert_equal(result["limfac_tot"],  # all neighbours
-                                np.array([1., 0., 0., 0., 0.]))
+                                np.array([[1., 0., 0., 0., 0.]]))
         np.testing.assert_equal(result["limfac_frm"],  # two neighbours
-                                np.array([0.5, 0., 0., 0., 0.]))
+                                np.array([[0.5, 0., 0., 0., 0.]]))
         np.testing.assert_equal(result["limfac_frz"],  # one neighbour
-                                np.array([0.25, 0., 0., 0., 0.]))
+                                np.array([[0.25, 0., 0., 0., 0.]]))
         np.testing.assert_equal(result["limfac_per"],  # one neighbour
-                                np.array([0.25, 0., 0., 0., 0.]))
+                                np.array([[0.25, 0., 0., 0., 0.]]))
         np.testing.assert_equal(result["limfac_wss"],  # one neighbour
-                                np.array([0.25, 0., 0., 0., 0.]))
+                                np.array([[0.25, 0., 0., 0., 0.]]))
 
     def test_basic_case_2(self, neighbors, perimeters, ac, ds):
         """Test basic case 2: Persistent contrails form everywhere except in
         cell 0."""
-        ds["t"].values = np.array([240.0, 228.0, 228.0, 228.0, 228.0])
-        ds["r"].values = np.array([99.0, 100.0, 100.0, 100.0, 100.0])
+        ds["t"].values = np.array([[[240.0, 228.0, 228.0, 228.0, 228.0]]])
+        ds["r"].values = np.array([[[99.0, 100.0, 100.0, 100.0, 100.0]]])
         result = lf.calc_limfacs(ds, ac, "h", neighbors, perimeters)
-        np.testing.assert_equal(result["ppcf"], np.array([0., 1., 1., 1., 1.]))
+        np.testing.assert_equal(result["ppcf"], np.array([[0., 1., 1., 1., 1.]]))
         for lf_var in ["limfac_tot", "limfac_frm", "limfac_frz", "limfac_per"]:
             np.testing.assert_allclose(result[lf_var],
-                                    np.array([0.0, 0.333, 0.333, 0.333, 0.333]),
+                                    np.array([[0.0, 0.333, 0.333, 0.333, 0.333]]),
                                     atol=1e-3)
         np.testing.assert_equal(result["limfac_wss"],
-                                np.array([0., 0., 0., 0., 0.]))
+                                np.array([[0., 0., 0., 0., 0.]]))
 
     def test_no_contrails(self, neighbors, perimeters, ac, ds):
         """Test case where no contrails form."""
-        ds["t"].values = np.array([240.0, 240.0, 240.0, 240.0, 240.0])
-        ds["r"].values = np.array([99.0, 99.0, 99.0, 99.0, 99.0])
+        ds["t"].values = np.array([[[240.0, 240.0, 240.0, 240.0, 240.0]]])
+        ds["r"].values = np.array([[[99.0, 99.0, 99.0, 99.0, 99.0]]])
         result = lf.calc_limfacs(ds, ac, "h", neighbors, perimeters)
         for lf_var in ["limfac_tot", "limfac_frm", "limfac_frz", "limfac_per",
                        "limfac_wss", "ppcf"]:
             np.testing.assert_equal(result[lf_var],
-                                    np.array([0., 0., 0., 0., 0.]))
+                                    np.array([[0., 0., 0., 0., 0.]]))
 
     def test_always_contrails(self, neighbors, perimeters, ac, ds):
         """Test case where contrails always form."""
-        ds["t"].values = np.array([228.0, 228.0, 228.0, 228.0, 228.0])
-        ds["r"].values = np.array([100.0, 100.0, 100.0, 100.0, 100.0])
+        ds["t"].values = np.array([[[228.0, 228.0, 228.0, 228.0, 228.0]]])
+        ds["r"].values = np.array([[[100.0, 100.0, 100.0, 100.0, 100.0]]])
         result = lf.calc_limfacs(ds, ac, "h", neighbors, perimeters)
-        np.testing.assert_equal(result["ppcf"], np.array([1., 1., 1., 1., 1.]))
+        np.testing.assert_equal(result["ppcf"], np.array([[1., 1., 1., 1., 1.]]))
         for lf_var in ["limfac_tot", "limfac_frm", "limfac_frz", "limfac_per",
                        "limfac_wss"]:
             np.testing.assert_equal(result[lf_var],
-                                    np.array([0., 0., 0., 0., 0.]))
-
-    def test_multiple_times(self, neighbors, perimeters, ac, ds):
-        """Test basic case 1 for time coordinate with multiple values."""
-        ds["t"].values = np.array([228.0, 231.0, 228.0, 228.0, 240.0])
-        ds["r"].values = np.array([100.0, 100.0, 99.0, 160.0, 100.0])
-        expanded_time = np.array([0.0, 1.0])
-        ds = ds.expand_dims({"time": expanded_time})
-        result = lf.calc_limfacs(ds, ac, "h", neighbors, perimeters)
-
-        # check output shape
-        assert "values" in result.sizes, "Dimension 'values' is missing in" \
-            "dataset."
-        assert result.sizes["values"] == 5, "Incorrect output size."
-
-        # check numerical results
-        np.testing.assert_equal(result["ppcf"], np.array([2., 0., 0., 0., 0.]))
-        np.testing.assert_equal(result["limfac_tot"],  # all neighbours
-                                np.array([2., 0., 0., 0., 0.]))
-        np.testing.assert_equal(result["limfac_frm"],  # two neighbours
-                                np.array([1., 0., 0., 0., 0.]))
-        np.testing.assert_equal(result["limfac_frz"],  # one neighbour
-                                np.array([0.5, 0., 0., 0., 0.]))
-        np.testing.assert_equal(result["limfac_per"],  # one neighbour
-                                np.array([0.5, 0., 0., 0., 0.]))
-        np.testing.assert_equal(result["limfac_wss"],  # one neighbour
-                                np.array([0.5, 0., 0., 0., 0.]))
-        assert result.n_time == 2, "Incorrect n_time value."
-
-    def test_multiple_levels(self, neighbors, perimeters, ac, ds):
-        """Test basic case 1 for level coordinate with multiple values."""
-        ds["t"].values = np.array([228.0, 231.0, 228.0, 228.0, 240.0])
-        ds["r"].values = np.array([100.0, 100.0, 99.0, 160.0, 100.0])
-        expanded_level = np.array([350., 350.])  # twice same level
-        ds = ds.expand_dims({"level": expanded_level})
-        result = lf.calc_limfacs(ds, ac, "h", neighbors, perimeters)
-
-        # check output shape
-        expected_sizes = {"level": 2, "values": 5}
-        for dim, size in expected_sizes.items():
-            assert dim in result.sizes, f"Dimension '{dim}' missing in output."
-            assert result.sizes[dim] == size, f"Dimension '{dim}' has size " \
-                f"{ds.sizes[dim]} but should have size {size}."
-
-        # check numerical results
-        for i_lvl in range(2):
-            res = result.isel(level=i_lvl)
-            np.testing.assert_equal(res["ppcf"],
-                                    np.array([1., 0., 0., 0., 0.]))
-            np.testing.assert_equal(res["limfac_tot"],  # all neighbours
-                                    np.array([1., 0., 0., 0., 0.]))
-            np.testing.assert_equal(res["limfac_frm"],  # two neighbours
-                                    np.array([0.5, 0., 0., 0., 0.]))
-            np.testing.assert_equal(res["limfac_frz"],  # one neighbour
-                                    np.array([0.25, 0., 0., 0., 0.]))
-            np.testing.assert_equal(res["limfac_per"],  # one neighbour
-                                    np.array([0.25, 0., 0., 0., 0.]))
-            np.testing.assert_equal(res["limfac_wss"],  # one neighbour
-                                    np.array([0.25, 0., 0., 0., 0.]))
-
-    def test_multiple_times_levels(self, neighbors, perimeters, ac, ds):
-        """Test basic case 1 for multiple level and time values."""
-        ds["t"].values = np.array([228.0, 231.0, 228.0, 228.0, 240.0])
-        ds["r"].values = np.array([100.0, 100.0, 99.0, 160.0, 100.0])
-        expanded_time = np.array([0.0, 1.0])
-        expanded_level = np.array([350.0, 350.0])
-        ds = ds.expand_dims({"time": expanded_time, "level": expanded_level})
-        result = lf.calc_limfacs(ds, ac, "h", neighbors, perimeters)
-
-        # check output shape
-        expected_sizes = {"level": 2, "values": 5}
-        for dim, size in expected_sizes.items():
-            assert dim in result.sizes, f"Dimension '{dim}' missing in output."
-            assert result.sizes[dim] == size, f"Dimension '{dim}' has size " \
-                f"{ds.sizes[dim]} but should have size {size}."
-        assert result.n_time == 2, "Incorrect n_time value."
-
-        # check numerical results
-        for i_lvl in range(2):
-            res = result.isel(level=i_lvl)
-            np.testing.assert_equal(res["ppcf"],
-                                    np.array([2., 0., 0., 0., 0.]))
-            np.testing.assert_equal(res["limfac_tot"],  # all neighbours
-                                    np.array([2., 0., 0., 0., 0.]))
-            np.testing.assert_equal(res["limfac_frm"],  # two neighbours
-                                    np.array([1., 0., 0., 0., 0.]))
-            np.testing.assert_equal(res["limfac_frz"],  # one neighbour
-                                    np.array([0.5, 0., 0., 0., 0.]))
-            np.testing.assert_equal(res["limfac_per"],  # one neighbour
-                                    np.array([0.5, 0., 0., 0., 0.]))
-            np.testing.assert_equal(res["limfac_wss"],  # one neighbour
-                                    np.array([0.5, 0., 0., 0., 0.]))
+                                    np.array([[0., 0., 0., 0., 0.]]))
 
     def test_vertical_case_1(self, ac, ds):
         """Test vertical base case 1."""
@@ -424,12 +334,13 @@ class TestCalcLimfacs:
         }
 
         # create vertical ds and calculate result
-        t = np.array([[228.0, 228.0], [228.0, 236.0], [228.0, 228.0]])
-        r = np.array([[99.0, 100.0], [100.0, 100.0], [160.0, 100.0]])
+        t = np.array([[[228.0, 228.0], [228.0, 236.0], [228.0, 228.0]]])
+        r = np.array([[[99.0, 100.0], [100.0, 100.0], [160.0, 100.0]]])
         level = np.array([351.0, 350.0, 349.0])
         ds = xr.Dataset(
-            {"t": (["level", "values"], t), "r": (["level", "values"], r)},
-            coords={"time": 0.0, "level": level, "values": np.empty(2),
+            {"t": (["time", "level", "values"], t),
+             "r": (["time", "level", "values"], r)},
+            coords={"time": [0.0], "level": level, "values": np.empty(2),
                     "latitude": (["values"], np.array([-20.0, 20.0])),
                     "longitude": (["values"], np.array([0.0, 180.0]))}
         ).drop_vars("values")
@@ -461,4 +372,57 @@ class TestCalcLimfacs:
         )
         np.testing.assert_equal(
             result["limfac_wss"], np.array([[0., 0.], [1., 0.], [0., 0.]])
+        )
+
+
+class TestCalcLimfacsNonborder:
+    """Tests function `calc_limfacs_nonborder`."""
+
+    @pytest.fixture(scope="class")
+    def ac(self):
+        """Fixture to create an example aircraft design specifications."""
+        ac_arr = np.array(["AC0", "AC1"])
+        ds_ac = xr.Dataset(
+            {"fuel": "JA1", "cp": 1004.0, "cp_mol": None, "EI_H2O": 1.25,
+             "Q": 43.6e6, "dH_mol": None, "eta": 0.4, "eps": 0.622, "R": None}
+        )
+        return ds_ac.expand_dims({"id": ac_arr})
+
+    @pytest.fixture(scope="class")
+    def ds(self):
+        """Fixture to create basic dataset for testing."""
+        level = np.array([350.0])  # [hPa]
+        time = np.array([0.0])
+        values = np.arange(5)
+        t = np.array([[[228.0, 231.0, 228.0, 228.0, 240.0]]])
+        r = np.array([[[100.0, 100.0, 99.0, 160.0, 100.0]]])
+        latitudes = np.linspace(-89.0, 89.0, num=5)
+        longitudes = np.linspace(0.0, 350.0, num=5)
+        return xr.Dataset(
+            {"t": (["time", "level", "values"], t),
+             "r": (["time", "level", "values"], r)},
+            coords={"values": values, "time": time, "level": level,
+                    "latitude": (["values"], latitudes),
+                    "longitude": (["values"], longitudes)}
+        ).drop_vars("values")
+
+    def test_basic_case_1(self, ds, ac):
+        """Test basic case 1: A persistent contrail forms only in cell 0."""
+        ds["t"].values = np.array([[[228.0, 231.0, 228.0, 228.0, 240.0]]])
+        ds["r"].values = np.array([[[100.0, 100.0, 99.0, 160.0, 100.0]]])
+        result = lf.calc_limfacs_nb(ds, ac, ["AC0"])
+        np.testing.assert_equal(
+            result["ppcf"], np.array([[[1., 0., 0., 0., 0.]]])
+        )
+        np.testing.assert_equal(
+            result["frm"], np.array([[[1., 0., 1., 1., 0.]]])
+        )
+        np.testing.assert_equal(
+            result["per"], np.array([[1., 1., 0., 1., 1.]])
+        )
+        np.testing.assert_equal(
+            result["frz"], np.array([[1., 1., 1., 1., 0.]])
+        )
+        np.testing.assert_equal(
+            result["wss"], np.array([[1., 1., 1., 0., 1.]])
         )
