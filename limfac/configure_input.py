@@ -161,14 +161,16 @@ def load_era5_dataset(date):
     dsg_t = xr.open_dataset(
         dir_path+t_file_path,
         engine="cfgrib",
-        backend_kwargs={"indexpath":None}
+        backend_kwargs={"indexpath":None},
+        # chunks={'time': 1}  # chunking for parallel processing
     )
     # load relative humidity dataset (157)
     r_file_path = "157/E5pl00_1H_{}_157.grb".format(date)
     dsg_r = xr.open_dataset(
         dir_path+r_file_path,
         engine="cfgrib",
-        backend_kwargs={"indexpath":None}
+        backend_kwargs={"indexpath":None},
+        # chunks={'time': 1}  # chunking for parallel processing
     )
     # merge datasets and translate coordinates to ECMWF
     # warnings package used to ignore UserWarning when converting time -> time
