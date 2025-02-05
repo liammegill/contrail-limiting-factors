@@ -10,3 +10,4 @@ ipykernel
 netCDF4
 scikit-learn
 pytest
+tqdm
