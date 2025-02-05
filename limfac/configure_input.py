@@ -142,18 +142,18 @@ def find_month_boundaries(start_date, end_date):
 #--- loading and reading data ---#
 #--------------------------------#
 
-def load_era5_dataset(date):
+def load_era5_dataset(date, dir_path="/pool/data/ERA5/E5/pl/an/1H/"):
     """Loads ERA5 data from DKRZ Levante for a certain input `date`.
 
     Args:
         date (str): Date in strftime format %Y-%m-%d, e.g. 2010-01-31
+        dir_path (str): Path to ERA5 data. Defaults to location on DKRZ Levante.
 
     Returns:
         xr.dataset: ERA5 dataset with coordinates `t` and `r` for levels
             [350, 300, 250, 225, 200, 175, 150] (hPa).
     """
-    # change dir_path and levels if necessary
-    dir_path = "/pool/data/ERA5/E5/pl/an/1H/"
+    # change levels if necessary
     levels = [18, 19, 20, 21, 22, 23, 24]
 
     # load temperature dataset (130)

@@ -11,8 +11,8 @@ __all__ = [
 ]
 
 
-__title__ = "Limfac"
-__version__ = "0.10.0-alpha"
+__title__ = "limfac"
+__version__ = "0.10.0"
 __author__ = "Liam Megill"
 __email__ = "liam.megill@dlr.de"
 __license__ = "Apache 2.0"
