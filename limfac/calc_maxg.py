@@ -187,7 +187,11 @@ def logistic(x, l, k, x0):
         float or array-like: The logistic function values for the given
             input `x`.
     """
-    return l / (1 + np.exp(-k * (x - x0)))
+    np.seterr(all="raise")
+    try:
+        return l / (1 + np.exp(-k * (x - x0)))
+    except FloatingPointError:  # protect the exponential
+        return np.nan
 
 
 def logistic_gen(x, l, k, x0, d):
@@ -207,7 +211,11 @@ def logistic_gen(x, l, k, x0, d):
         float or array-like: The values of the shifted logistic function for
             the input `x`.
     """
-    return l / (1 + np.exp(-k * (x - x0))) + d
+    np.seterr(all="raise")
+    try:
+        return l / (1 + np.exp(-k * (x - x0))) + d
+    except FloatingPointError:  # protect the exponential
+        return np.nan
 
 
 def combined_fit_accuracy(x_split, x_data, y_data) -> dict:
@@ -255,7 +263,7 @@ def combined_fit_accuracy(x_split, x_data, y_data) -> dict:
 
     # return dictionary of results
     return {"mse": mse,
-            "r2": r2,
+            "r2": r2 if r2 >= 0.0 else np.inf,
             "params_1": params_1,
             "params_2": params_2,
             "lpd": params_1[0] + params_1[3] + params_2[0]}
@@ -282,7 +290,7 @@ def single_fit_accuracy(x_data, y_data) -> dict:
     r2 = r2_score(y_data, y)
     return {
         "mse": mse,
-        "r2": r2,
+        "r2": r2 if r2 >= 0.0 else np.inf,
         "params": params,
         "lpd": params[0] + params[3]
     }
@@ -400,7 +408,7 @@ def calc_ppcf_fits(ds, cum_hist, bin_centres):
         )
 
         if i_lvl < 5:  # Low altitude: segmented fitting
-            x_splits = np.linspace(0.1, 3.9, 500)
+            x_splits = np.arange(0.2, 10.2, 0.2)
             results = evaluate_segmented_fit(x_splits, x_data, y_data)
             optimal_results[lvl] = find_optimal_split(results)
         else:  # High altitude: single logistic fit
@@ -410,7 +418,7 @@ def calc_ppcf_fits(ds, cum_hist, bin_centres):
     x_data, y_data = sort_cum_hist_data(
         bin_centres, cum_hist, len(ds.season) * len(ds.level)
     )
-    x_splits = np.linspace(0.1, 3.9, 500)
+    x_splits = np.arange(0.2, 10.2, 0.2)
     results = evaluate_segmented_fit(x_splits, x_data, y_data)
     optimal_results["all"] = find_optimal_split(results)
 
