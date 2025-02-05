@@ -27,7 +27,7 @@ This dataset contains all data and code developed during research towards the li
 
 The analysis was conducted on the supercomputer Levante of the German Climate Computing Center (DKRZ) using ERA5 data. The ERA5 data is stored on Levante in GRIB format, but is otherwise also available from ECMWF at https://cds.climate.copernicus.eu/. The DEPA 2050 air traffic scenario is available from Zenodo at https://doi.org/10.5281/zenodo.11442323. 
 
-The aircraft naming differs to that in the linked paper. For reference, AC0 = CON-LG (last generation conventional); AC1 = CON-NG (next generation conventional); AC3 = HYB-80 (80% hybrid electric); AC4 = H2C-04 (hydrogen combustion); AC7 = WET-50 (Water Enhanced Turbofan with 50% EIH2O reduction); and AC8 = WET-75 (Water Enhanced Turbofan with 75% EIH2O reduction).
+The aircraft naming differs to that in the linked paper. The `02-lm-create_aircraft_specs.ipynb` notebook includes a conversion table.
 
 ---
 
@@ -39,7 +39,7 @@ The structure of the full project directory is the following:
 
 
     ├── LICENSES
-    │   ├── CC-BY-4.0.txt  <- CC-BY 4.0 license for data files       
+    │   ├── CC-BY-4.0.txt            <- CC-BY 4.0 license for data files       
     │   └── Apache-License-v2.0.txt  <- Apache License v2.0 for scripts      
     │
     ├── README.md 
@@ -52,23 +52,39 @@ The structure of the full project directory is the following:
     │   │
     │   ├── processed 
     │   │   ├── limfac
-    │   │   │   ├── AC* (0, 1, 3, 4, 7, 8)
+    │   │   │   ├── AC* (0, 1, 3, 4, 5, 6, 7, 8, 9, 10)
     │   │   │   │   └── data per AC can be requested from the corresponding author
+    │   │   │   ├── nb  <- seasonal data can be requested from the corresponding author
     │   │   │   ├── areas_grib.pickle
-    │   │   │   ├── limfac_allAC_rmS_ERA5_GRIB_allcorr_v3.nc
+    │   │   │   ├── limfac_allAC_rmS_ERA5_GRIB_allcorr_v4.nc
+    │   │   │   ├── nb_limfac_allAC_rmS_ERA5_GRIB_allcorr_v4.nc
     │   │   │   ├── neighbours_grib.pickle
-    │   │   │   ├── nonborder_limfac_allAC_rmS_ERA5_GRIB_allcorr.nc
     │   │   │   ├── perimeters_grib.pickle
-    │   │   │   ├── vert_limfac_allAC_rmS_ERA5_GRIB_allcorr_v3.nc
+    │   │   │   ├── vert_limfac_allAC_rmS_ERA5_GRIB_allcorr_v4.nc
     │   │   │   └── vertical_neighbors_grib.pickle
     │   │   │
     │   │   └── ppcf
-    │   │       ├── ppcfhist_M_2010s_ERA5_GRIB_v2.nc
-    │   │       └── ppcfhist_S_2010s_ERA5_GRIB_v2.nc
+    │   │       ├── fit_res.pickle
+    │   │       ├── ppcfhist_M_2010s_ERA5_GRIB_v3.nc
+    │   │       └── ppcfhist_S_2010s_ERA5_GRIB_v3.nc
     │   │
     │   ├── raw  <- suggested location for ERA5 data if not using DKRZ Levante
     │   │
-    │   └── aircraft_specs_v2.nc
+    │   └── aircraft_specs_v3.nc
+    │
+    ├── limfac  <- limiting factors module
+    │   ├── _about_.py
+    │   ├── _init_.py
+    │   ├── calc_atmos.py
+    │   ├── calc_limfac.py
+    │   ├── calc_maxg.py
+    │   ├── configure_input.py
+    │   └── tools.py
+    │
+    ├── tests  <- test functions for the limiting factors module
+    │   ├── _init_.py
+    │   ├── calc_limfac_test.py
+    │   └── calc_maxg_test.py
     │
     ├── notebooks                              <- Jupyter notebooks.
     |   ├── figs                               <- folder for output figures
@@ -81,7 +97,7 @@ The structure of the full project directory is the following:
     │   ├── 43-lm-random_vertical_limfac.ipynb <- performs vertical limiting factors (borders) calculations using ERA5 data
     │   ├── 50-lm-num_limfac_limiting.ipynb    <- performs limiting factors (non-border) calculations using ERA5 data
     │   ├── 53-lm-concat_results.ipynb         <- combines all individual datasets into single ones
-    │   └── helper.py                          <- helper functions for all notebooks
+    │   ├── 99-lm-response_reviewers.ipynb     <- calculations for peer review
     │
     └── requirements.txt   <- The requirements file for reproducing the analysis environment
 
@@ -106,7 +122,7 @@ All data files are licensed under a CC-BY 4.0 (see `LICENSE/CC-BY-4.0.txt` file)
 
 ## Copyright
 
-Copyright  © 2024 Liam Megill
+Copyright  © 2025 Liam Megill
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0. Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
 
